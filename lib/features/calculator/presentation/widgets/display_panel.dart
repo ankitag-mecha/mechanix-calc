@@ -8,6 +8,7 @@ import '../../bloc/calculator_state.dart';
 
 class DisplayPanel extends StatefulWidget {
   final String expression;
+  final String calculatedExpression;
   final String result;
   final String errorMessage;
   final List<HistoryItem> history;
@@ -17,7 +18,8 @@ class DisplayPanel extends StatefulWidget {
 
   const DisplayPanel({
     super.key,
-    required this.expression,
+    this.expression = '',
+    this.calculatedExpression = '',
     required this.result,
     required this.errorMessage,
     this.history = const [],
@@ -61,20 +63,28 @@ class _DisplayPanelState extends State<DisplayPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isHistoryOpen) {
+      return HistoryOverlay(
+        history: widget.history,
+        onHistoryItemTap: widget.onHistoryItemTap,
+      );
+    }
+
     final l10n = AppLocalizations.of(context);
     final String topExpression;
     final String bottomText;
 
     if (widget.errorMessage.isNotEmpty &&
         widget.errorMessage == invalidOperationsErrorMessage) {
-      topExpression = widget.expression;
+      topExpression = widget.expression.isNotEmpty
+          ? widget.expression
+          : widget.calculatedExpression;
       bottomText = _getErrorMessage(l10n, widget.errorMessage);
     } else if (widget.expression.isNotEmpty) {
       topExpression = '';
       bottomText = widget.expression;
-    } else if (widget.history.isNotEmpty &&
-        widget.history.first.result == widget.result) {
-      topExpression = widget.history.first.expression;
+    } else if (widget.calculatedExpression.isNotEmpty) {
+      topExpression = widget.calculatedExpression;
       bottomText = widget.result.isNotEmpty ? widget.result : '0';
     } else {
       topExpression = '';
@@ -83,67 +93,79 @@ class _DisplayPanelState extends State<DisplayPanel> {
 
     final displayContent = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (topExpression.isNotEmpty && !widget.isHistoryOpen) ...[
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                topExpression,
-                textAlign: TextAlign.end,
-                softWrap: true,
-                overflow: TextOverflow.visible,
-                style: Theme.of(context).textTheme.titleSmall!.copyWith(
-                  fontFamily: MechanixFontFamily.geistMono,
-                  fontSize: 18,
-                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final displayMediumStyle = Theme.of(context).textTheme.displayMedium!
+              .copyWith(
+                fontFamily: MechanixFontFamily.geistMono,
+                fontSize: 52,
+                fontWeight: FontWeight.w400,
+              );
+
+          final headlineMediumStyle = Theme.of(context)
+              .textTheme
+              .headlineMedium!
+              .copyWith(
+                fontFamily: MechanixFontFamily.geistMono,
+                fontSize: 32,
+                fontWeight: FontWeight.w400,
+              );
+
+          final textPainter = TextPainter(
+            text: TextSpan(text: bottomText, style: displayMediumStyle),
+            textDirection: Directionality.of(context),
+            maxLines: 1,
+          )..layout();
+
+          final isLargeMultilineExpression =
+              textPainter.width > constraints.maxWidth;
+
+          final bottomTextStyle = isLargeMultilineExpression
+              ? headlineMediumStyle
+              : displayMediumStyle;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (topExpression.isNotEmpty) ...[
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    topExpression,
+                    textAlign: TextAlign.end,
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
+                    style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                      fontFamily: MechanixFontFamily.geistMono,
+                      fontSize: 18,
+                      color: Theme.of(context).colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  bottomText,
+                  textAlign: TextAlign.end,
+                  softWrap: true,
+                  overflow: TextOverflow.visible,
+                  style: bottomTextStyle,
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              bottomText,
-              textAlign: TextAlign.end,
-              softWrap: true,
-              overflow: TextOverflow.visible,
-              style: Theme.of(
-                context,
-              ).textTheme.displayMedium!.copyWith(fontFamily: 'GeistMono'),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
 
-    if (widget.isHistoryOpen) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: HistoryOverlay(
-              history: widget.history,
-              onHistoryItemTap: widget.onHistoryItemTap,
-            ),
-          ),
-          GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: widget.onDismissHistory,
-            child: displayContent,
-          ),
-        ],
-      );
-    }
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: widget.onDismissHistory,
       child: Scrollbar(
         controller: _scrollController,
-        thumbVisibility: true,
+        thumbVisibility: false,
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(
             dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},

@@ -14,9 +14,16 @@ class CalculatorBloc extends Bloc<CalculatorEvent, CalculatorState> {
   static final _numberFormattingPattern = RegExp(
     r'(\d{1,3})(?=(\d{3})+(?!\d))',
   );
+  static final _leadingDecimalPattern = RegExp(r'(?<=[+\-*/])\.');
 
   void _onClearPressed(ClearPressed event, Emitter<CalculatorState> emit) {
-    emit(state.copyWith(expression: '', result: '0', errorMessage: ''));
+    emit(
+      state.copyWith(
+        expression: '',
+        result: '0',
+        errorMessage: '',
+      ),
+    );
   }
 
   void _onCalculateResult(
@@ -35,10 +42,24 @@ class CalculatorBloc extends Bloc<CalculatorEvent, CalculatorState> {
           .replaceAll('×', '*')
           .replaceAll('÷', '/');
 
+      // Convert leading decimal values to valid numeric expressions.
+      // Example: 4*.2 -> 4*0.2
+      finalExpression = finalExpression.replaceAllMapped(
+        _leadingDecimalPattern,
+        (_) => '0.',
+      );
+
       // Convert percentage values to division by 100 for evaluation.
       finalExpression = finalExpression.replaceAllMapped(
         _percentPattern,
         (match) => '(${match[1]}/100)',
+      );
+
+      // Wrap negative numbers that follow an operator in parentheses for evaluation.
+      // E.g., -2*-2 -> -2*(-2), 5+-3 -> 5+(-3), 10/-2 -> 10/(-2), 5--3 -> 5-(-3)
+      finalExpression = finalExpression.replaceAllMapped(
+        RegExp(r'(?<=[+\-*/])-(?:\d+(?:\.\d+)?|\.\d+)'),
+        (match) => '(${match.group(0)})',
       );
 
       GrammarParser p = GrammarParser();
@@ -84,7 +105,7 @@ class CalculatorBloc extends Bloc<CalculatorEvent, CalculatorState> {
 
       emit(
         state.copyWith(
-          expression: '',
+          expression: expressionToEvaluate,
           result: result,
           history: updatedHistory,
           errorMessage: '',
@@ -102,4 +123,3 @@ class CalculatorBloc extends Bloc<CalculatorEvent, CalculatorState> {
     }
   }
 }
-

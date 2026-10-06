@@ -88,7 +88,14 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _onClearPressed();
       return;
     }
-    final res = ExpressionBuilder.handleToggleSign(_expressionNotifier.value);
+    String currentExpr = _expressionNotifier.value;
+    if (currentExpr.isEmpty) {
+      final previousResult = context.read<CalculatorBloc>().state.result;
+      if (previousResult.isNotEmpty && previousResult != '0') {
+        currentExpr = previousResult.replaceAll(',', '');
+      }
+    }
+    final res = ExpressionBuilder.handleToggleSign(currentExpr);
     _expressionNotifier.value = res.expression;
     _errorMessageNotifier.value = res.errorMessage;
   }
@@ -178,69 +185,107 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           autofocus: true,
           onKeyEvent: _handleKeyEvent,
           child: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: BlocBuilder<CalculatorBloc, CalculatorState>(
-                    buildWhen: (prev, curr) =>
-                        prev.result != curr.result ||
-                        prev.history != curr.history ||
-                        prev.errorMessage != curr.errorMessage,
-                    builder: (context, blocState) {
-                      return ValueListenableBuilder<bool>(
-                        valueListenable: _isHistoryOpenNotifier,
-                        builder: (context, isHistoryOpen, _) {
-                          return ValueListenableBuilder<String>(
-                            valueListenable: _expressionNotifier,
-                            builder: (context, expression, _) {
-                              return ValueListenableBuilder<String>(
-                                valueListenable: _errorMessageNotifier,
-                                builder: (context, errorMessage, _) {
-                                  final isOpen =
-                                      isHistoryOpen &&
-                                      blocState.history.isNotEmpty;
-                                  final displayExpression =
-                                      expression.isNotEmpty
-                                      ? expression
-                                      : blocState.expression;
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const double mainSpacing = 8.0;
+                final double buttonGridHeight = constraints.maxHeight * 4 / 5;
+                final double itemHeight =
+                    (buttonGridHeight - 32.0 - (mainSpacing * 4)) / 5;
+                final double displayHeight = constraints.maxHeight * 1 / 5;
+                final double historyHeight =
+                    displayHeight + 16.0 + itemHeight + (mainSpacing / 2);
 
-                                  return DisplayPanel(
-                                    expression: displayExpression,
-                                    result: blocState.result,
-                                    errorMessage: errorMessage,
-                                    history: blocState.history,
-                                    isHistoryOpen: isOpen,
-                                    onDismissHistory: () {
-                                      _isHistoryOpenNotifier.value = false;
-                                    },
-                                    onHistoryItemTap: (expr) {
-                                      _expressionNotifier.value = expr;
-                                      _errorMessageNotifier.value = '';
-                                      _isHistoryOpenNotifier.value = false;
+                return Stack(
+                  children: [
+                    Column(
+                      children: [
+                        Expanded(
+                          flex: 1,
+                          child: BlocBuilder<CalculatorBloc, CalculatorState>(
+                            buildWhen: (prev, curr) =>
+                                prev.expression != curr.expression ||
+                                prev.result != curr.result ||
+                                prev.history != curr.history ||
+                                prev.errorMessage != curr.errorMessage,
+                            builder: (context, blocState) {
+                              return ValueListenableBuilder<String>(
+                                valueListenable: _expressionNotifier,
+                                builder: (context, expression, _) {
+                                  return ValueListenableBuilder<String>(
+                                    valueListenable: _errorMessageNotifier,
+                                    builder: (context, errorMessage, _) {
+                                      return DisplayPanel(
+                                        expression: expression,
+                                        calculatedExpression:
+                                            blocState.expression,
+                                        result: blocState.result,
+                                        errorMessage: errorMessage.isNotEmpty
+                                            ? errorMessage
+                                            : blocState.errorMessage,
+                                        history: blocState.history,
+                                        isHistoryOpen: false,
+                                        onDismissHistory: () {
+                                          _isHistoryOpenNotifier.value = false;
+                                        },
+                                        onHistoryItemTap: (expr) {
+                                          _expressionNotifier.value = expr;
+                                          _errorMessageNotifier.value = '';
+                                          _isHistoryOpenNotifier.value = false;
+                                        },
+                                      );
                                     },
                                   );
                                 },
                               );
                             },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-                Expanded(
-                  flex: 4,
-                  child: Listener(
-                    onPointerDown: (_) {
-                      if (_isHistoryOpenNotifier.value) {
-                        _isHistoryOpenNotifier.value = false;
-                      }
-                    },
-                    child: ButtonGrid(onButtonPressed: _handleButtonAction),
-                  ),
-                ),
-              ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 4,
+                          child: Listener(
+                            onPointerDown: (_) {
+                              if (_isHistoryOpenNotifier.value) {
+                                _isHistoryOpenNotifier.value = false;
+                              }
+                            },
+                            child: ButtonGrid(
+                              onButtonPressed: _handleButtonAction,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    BlocBuilder<CalculatorBloc, CalculatorState>(
+                      buildWhen: (prev, curr) => prev.history != curr.history,
+                      builder: (context, blocState) {
+                        return ValueListenableBuilder<bool>(
+                          valueListenable: _isHistoryOpenNotifier,
+                          builder: (context, isHistoryOpen, _) {
+                            final isOpen =
+                                isHistoryOpen && blocState.history.isNotEmpty;
+                            if (!isOpen) return const SizedBox.shrink();
+
+                            return Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: historyHeight,
+                              child: HistoryOverlay(
+                                history: blocState.history,
+                                onHistoryItemTap: (expr) {
+                                  _expressionNotifier.value = expr;
+                                  _errorMessageNotifier.value = '';
+                                  _isHistoryOpenNotifier.value = false;
+                                },
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
